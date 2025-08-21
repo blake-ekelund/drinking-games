@@ -2,19 +2,17 @@
 
 import { useEffect, useState } from 'react';
 import type { Card, SlotIndex } from './components/types';
-import { buildShuffledDeck, drawOne } from './components/deck';
+import { buildShuffledDeck, drawOne, rankLabel } from './components/deck';
 import { CardView } from './components/CardView';
 import { DrinkOverlay } from './components/DrinkOverlay';
-import { ChevronUp, ChevronDown, RefreshCw } from 'lucide-react';
 
 type GuessHL = 'higher' | 'lower';
 type GuessColor = 'red' | 'black';
 
 export default function FuckTheDealerPage() {
-  // ----- state -----
   const [deck, setDeck] = useState<Card[]>([]);
   const [discard, setDiscard] = useState<Card[]>([]);
-  const [slots, setSlots] = useState<(Card | null)[]>([null, null, null, null, null]);
+  const [slots, setSlots] = useState<(Card | null)[]>([null, null, null, null, null]); // 1..5
   const [pos, setPos] = useState<SlotIndex>(0);
   const [lastFlip, setLastFlip] = useState<Card | null>(null);
   const [message, setMessage] = useState<string>('');
@@ -24,7 +22,6 @@ export default function FuckTheDealerPage() {
   const [drinkAnim, setDrinkAnim] = useState(false);
   const [drinkSeed, setDrinkSeed] = useState(1);
 
-  // ----- lifecycle -----
   useEffect(() => { newGame(); }, []);
 
   function newGame() {
@@ -52,7 +49,7 @@ export default function FuckTheDealerPage() {
       const d = drawOne(rest); rest = d.deck;
       s[slotIndex] = d.card!;
     };
-    // slots 1,2,4,5 get cards
+    // 1,2,4,5 get cards; 3 stays empty
     take(0); take(1); take(3); take(4);
 
     setSlots(s);
@@ -80,7 +77,8 @@ export default function FuckTheDealerPage() {
         if (nextPos === 2) setMessage('Slot 3: Red or Black?');
         else setMessage(`Slot ${nextPos + 1}: Higher or Lower?`);
       } else {
-        setDiscard(d => [ ...(slots.filter(Boolean) as Card[]), ...d ]);
+        // Cleared slot 5 — discard ALL current board cards (1..5), then deal new row
+        setDiscard(d => [...(slots.filter(Boolean) as Card[]), ...d]);
         setSlots([null, null, null, null, null]);
         setPos(0);
         setMessage('Row cleared! Dealing new row...');
@@ -93,9 +91,10 @@ export default function FuckTheDealerPage() {
     }
   }
 
+  // --- Core rule change: put the drawn card into the current slot (always). ---
   function guessHigherLower(guess: GuessHL) {
     if (!canPlay()) return;
-    const base = slots[pos];
+    const base = slots[pos]; // must exist for HL turns
     if (!base) return;
 
     const draw = drawOne(deck);
@@ -105,9 +104,11 @@ export default function FuckTheDealerPage() {
     setDeck(draw.deck);
     setLastFlip(flipped);
 
-    const cmp = flipped.rank - base.rank;
+    // Evaluate vs the PREVIOUS card
+    const cmp = flipped.rank - base.rank; // >0 higher, <0 lower, 0 tie = wrong
     const correct = (cmp > 0 && guess === 'higher') || (cmp < 0 && guess === 'lower');
 
+    // Replace slot with flipped card; move previous slot card to discard
     setSlots(prev => {
       const next = [...prev];
       const prevCard = next[pos];
@@ -131,9 +132,11 @@ export default function FuckTheDealerPage() {
 
     const correct = flipped.color === guess;
 
+    // Slot 3 was empty initially; place flipped card into slot 3.
+    // If slot 3 already had a card, move that one to discard.
     setSlots(prev => {
       const next = [...prev];
-      const prevCard = next[pos];
+      const prevCard = next[pos]; // pos === 2 here
       next[pos] = flipped;
       if (prevCard) setDiscard(d => [prevCard, ...d]);
       return next;
@@ -145,85 +148,82 @@ export default function FuckTheDealerPage() {
   const isColorTurn = pos === 2;
   const prompt = message || (isColorTurn ? 'Red or Black?' : 'Higher or Lower?');
 
-  // --- UI ---
   return (
-    <main className="min-h-[100svh] bg-slate-900 text-white flex flex-col pt-[env(safe-area-inset-top)]">
-      <header className="sticky top-0 z-20 bg-slate-900/80 backdrop-blur border-b border-white/10">
-        <div className="mx-auto max-w-md md:max-w-lg lg:max-w-2xl px-4 py-2 flex items-center justify-between">
-          <h1 className="text-lg md:text-xl font-extrabold">Fuck the Dealer</h1>
-          <div className="text-xs md:text-sm text-white/70">Deck: {deck.length} • Discard: {discard.length}</div>
-        </div>
-      </header>
+    <main className="min-h-[100svh] bg-slate-900 text-white flex items-center justify-center p-6">
+      <div className="w-full max-w-4xl">
+        <header className="flex items-end justify-between">
+          <h1 className="text-2xl sm:text-3xl font-extrabold">Fuck the Dealer</h1>
+          <div className="text-sm text-white/70">Dealer: {deck.length} • Discard: {discard.length}</div>
+        </header>
 
-      <section className="mx-auto w-full max-w-md md:max-w-lg lg:max-w-2xl px-4 py-3 pb-36 flex-1">
-        <div>
-          <div className="text-[11px] uppercase tracking-wide text-white/50">Last Flip</div>
-          <div className="mt-1 h-28 md:h-32 lg:h-36 rounded-xl border border-white/10 bg-white/5 grid place-items-center">
-            <CardView card={lastFlip} placeholder="—" />
-          </div>
-        </div>
+        {/* Board (shake on penalty) */}
+        <div className={`mt-4 bg-slate-950/60 border border-white/10 rounded-2xl p-4 relative overflow-hidden ${drinkAnim ? 'drink-shake' : ''}`}>
+          <DrinkOverlay show={drinkAnim} seed={drinkSeed} />
 
-        <div className="mt-3">
-          <div className="text-[11px] uppercase tracking-wide text-white/50">Dealer</div>
-          <div className={`mt-1 h-56 md:h-64 lg:h-72 rounded-2xl border border-white/15 bg-white/5 relative overflow-hidden select-none ${drinkAnim ? 'drink-shake' : ''}`}>
-            <DrinkOverlay show={drinkAnim} seed={drinkSeed} />
-            <div className="absolute inset-0 grid place-items-center">
-              <div className="text-white/50 text-xs md:text-sm">{prompt}</div>
+          <div className="grid grid-cols-5 gap-3 place-items-center">
+            <div className={`rounded-xl p-1 ${pos===0 ? 'ring-2 ring-amber-300' : ''}`}>
+              <CardView card={slots[0]} placeholder="Slot 1" />
+              <div className="mt-1 text-center text-xs text-white/60">1</div>
+            </div>
+            <div className={`rounded-xl p-1 ${pos===1 ? 'ring-2 ring-amber-300' : ''}`}>
+              <CardView card={slots[1]} placeholder="Slot 2" />
+              <div className="mt-1 text-center text-xs text-white/60">2</div>
+            </div>
+            <div className={`rounded-xl p-1 ${pos===2 ? 'ring-2 ring-amber-300' : ''}`}>
+              <CardView card={slots[2]} placeholder="Slot 3 (Color)" />
+              <div className="mt-1 text-center text-xs text-white/60">3 (Color)</div>
+            </div>
+            <div className={`rounded-xl p-1 ${pos===3 ? 'ring-2 ring-amber-300' : ''}`}>
+              <CardView card={slots[3]} placeholder="Slot 4" />
+              <div className="mt-1 text-center text-xs text-white/60">4</div>
+            </div>
+            <div className={`rounded-xl p-1 ${pos===4 ? 'ring-2 ring-amber-300' : ''}`}>
+              <CardView card={slots[4]} placeholder="Slot 5" />
+              <div className="mt-1 text-center text-xs text-white/60">5</div>
             </div>
           </div>
-        </div>
 
-        <div className="mt-4">
-          <div className="text-[11px] uppercase tracking-wide text-white/50">Board</div>
-          <div className="mt-2 overflow-x-auto">
-            <div className="flex gap-3 w-max">
-              {[0,1,2,3,4].map(i => (
-                <div key={i} className={`rounded-xl p-1 ${pos===i ? 'ring-2 ring-amber-300' : ''}`}>
-                  <CardView card={slots[i]} placeholder={i===2 ? 'Slot 3 (Color)' : `Slot ${i+1}`} />
-                  <div className="mt-1 text-center text-[11px] md:text-xs text-white/60">{i===2 ? '3 (Color)' : i+1}</div>
-                </div>
-              ))}
+          {/* Prompt + controls */}
+          <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="text-sm sm:text-base">{prompt}</div>
+            <div className="flex gap-2">
+              {isColorTurn ? (
+                <>
+                  <button onClick={() => guessColor('red')}   disabled={!canPlay()} className="px-3 py-2 rounded-md bg-red-600 hover:bg-red-500 disabled:opacity-50">Red</button>
+                  <button onClick={() => guessColor('black')} disabled={!canPlay()} className="px-3 py-2 rounded-md bg-slate-700 hover:bg-slate-600 disabled:opacity-50">Black</button>
+                </>
+              ) : (
+                <>
+                  <button onClick={() => guessHigherLower('higher')} disabled={!canPlay()} className="px-3 py-2 rounded-md bg-green-600 hover:bg-green-500 disabled:opacity-50">Higher</button>
+                  <button onClick={() => guessHigherLower('lower')}  disabled={!canPlay()} className="px-3 py-2 rounded-md bg-blue-600  hover:bg-blue-500  disabled:opacity-50">Lower</button>
+                </>
+              )}
+              <button onClick={newGame} className="px-3 py-2 rounded-md bg-white/10 border border-white/20 hover:bg-white/15">New Game</button>
             </div>
           </div>
+
+          {/* Last flip (kept for clarity; the slot already shows it) */}
+          <div className="mt-4 flex items-center gap-3">
+            <div className="text-xs text-white/60">Last Flip:</div>
+            <CardView card={lastFlip} placeholder="None" />
+            {lastFlip && (
+              <div className="text-xs text-white/70">
+                {rankLabel(lastFlip.rank)}{lastFlip.suit} • {lastFlip.color.toUpperCase()}
+              </div>
+            )}
+          </div>
+
+          {gameOver && (
+            <div className="mt-4 p-3 rounded-lg bg-red-600/20 border border-red-600/40 text-sm">
+              Out of cards. Click <b>New Game</b> to reshuffle.
+            </div>
+          )}
         </div>
 
-        <div className="mt-3 text-sm md:text-base">{prompt}</div>
-
-        {gameOver && (
-          <div className="mt-3 p-3 rounded-lg bg-red-600/20 border border-red-600/40 text-sm">
-            Out of cards. Tap <b>New Game</b> to reshuffle.
-          </div>
-        )}
-      </section>
-
-      <nav className="fixed bottom-0 left-0 right-0 z-30 bg-slate-950/90 backdrop-blur border-t border-white/10 pb-[env(safe-area-inset-bottom)]">
-        <div className="mx-auto max-w-md md:max-w-lg lg:max-w-2xl px-4 py-3">
-          <div className="grid grid-cols-3 gap-2">
-            <button
-              onClick={() => isColorTurn ? guessColor('red') : guessHigherLower('higher')}
-              disabled={!canPlay()}
-              className="h-12 md:h-14 rounded-xl text-sm md:text-base font-semibold bg-emerald-500 hover:bg-emerald-400 text-black disabled:opacity-50"
-            >
-              {isColorTurn ? 'Red' : (<span className="inline-flex items-center gap-1"><ChevronUp className="w-4 h-4 md:w-5 md:h-5" /> Higher</span>)}
-            </button>
-
-            <button
-              onClick={newGame}
-              className="h-12 md:h-14 rounded-xl text-sm md:text-base font-semibold bg-white/10 hover:bg-white/15 border border-white/20"
-            >
-              <span className="inline-flex items-center gap-1"><RefreshCw className="w-4 h-4 md:w-5 md:h-5" /> New</span>
-            </button>
-
-            <button
-              onClick={() => isColorTurn ? guessColor('black') : guessHigherLower('lower')}
-              disabled={!canPlay()}
-              className="h-12 md:h-14 rounded-xl text-sm md:text-base font-semibold bg-blue-500 hover:bg-blue-400 text-black disabled:opacity-50"
-            >
-              {isColorTurn ? 'Black' : (<span className="inline-flex items-center gap-1"><ChevronDown className="w-4 h-4 md:w-5 md:h-5" /> Lower</span>)}
-            </button>
-          </div>
-        </div>
-      </nav>
+        <p className="mt-3 text-xs text-white/50">
+          Rules: Aces high; ties lose. Each guess draws one card onto the board; the previous slot card moves to discard. Clear slot 5 to deal a new row.
+        </p>
+      </div>
     </main>
   );
 }
