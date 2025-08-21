@@ -2,6 +2,13 @@
 
 import { useMemo } from 'react';
 
+type CSSVarStyle = React.CSSProperties & {
+  '--x'?: string | number;
+  '--y'?: string | number;
+  '--r'?: string | number;
+  '--s'?: string | number;
+};
+
 export function DrinkOverlay({
   show,
   seed = 0,
@@ -18,11 +25,10 @@ export function DrinkOverlay({
     const count = 18;
     return Array.from({ length: count }).map((_, i) => {
       const e = EMOJI[i % EMOJI.length];
-      // spread roughly in a circle
       const ang = rng() * Math.PI * 2;
       const r = 60 + rng() * 220; // px radius
       const x = Math.cos(ang) * r;
-      const y = Math.sin(ang) * r * 0.75; // a bit flatter vertically
+      const y = Math.sin(ang) * r * 0.75;
       const rot = (rng() * 120 - 60).toFixed(1);
       const delay = (i * 0.015 + rng() * 0.06).toFixed(3);
       const dur = (0.6 + rng() * 0.2).toFixed(3);
@@ -43,30 +49,29 @@ export function DrinkOverlay({
           <span className="drink-text">{message}</span>
         </div>
       </div>
+
       {/* emoji burst */}
       <div className="absolute inset-0 grid place-items-center">
         <div className="relative">
-          {parts.map((p, i) => (
-            <span
-              key={i}
-              className="absolute drink-pop"
-              style={{
-                transform: `translate3d(0,0,0) scale(0) rotate(0deg)`,
-                animationDelay: `${p.delay}s`,
-                animationDuration: `${p.dur}s`,
-                // pass end position via CSS vars
-                // @ts-ignore - custom properties for keyframes
-                '--x': `${p.x}px`,
-                '--y': `${p.y}px`,
-                '--r': `${p.rot}deg`,
-                '--s': p.scale,
-                fontSize: '22px',
-                left: 0, top: 0,
-              } as React.CSSProperties}
-            >
-              {p.e}
-            </span>
-          ))}
+          {parts.map((p, i) => {
+            const style: CSSVarStyle = {
+              transform: 'translate3d(0,0,0) scale(0) rotate(0deg)',
+              animationDelay: `${p.delay}s`,
+              animationDuration: `${p.dur}s`,
+              '--x': `${p.x}px`,
+              '--y': `${p.y}px`,
+              '--r': `${p.rot}deg`,
+              '--s': p.scale,
+              fontSize: '22px',
+              left: 0,
+              top: 0,
+            };
+            return (
+              <span key={i} className="absolute drink-pop" style={style}>
+                {p.e}
+              </span>
+            );
+          })}
         </div>
       </div>
 
@@ -87,18 +92,13 @@ export function DrinkOverlay({
           18%  { transform: scale(1.12); opacity: 1; filter: drop-shadow(0 6px 18px rgba(0,0,0,0.45)); }
           100% { transform: scale(1.0); opacity: 0; }
         }
-        .drink-text-pop {
-          animation: drink-text-pop-kf 0.9s cubic-bezier(.2,.8,.2,1) both;
-        }
+        .drink-text-pop { animation: drink-text-pop-kf 0.9s cubic-bezier(.2,.8,.2,1) both; }
         .drink-text {
           font-weight: 900;
           font-size: clamp(40px, 6vw, 80px);
           letter-spacing: 0.06em;
-          color: white;
           -webkit-text-stroke: 2px rgba(0,0,0,0.5);
-          text-shadow:
-            0 2px 0 rgba(0,0,0,0.25),
-            0 10px 24px rgba(0,0,0,0.35);
+          text-shadow: 0 2px 0 rgba(0,0,0,0.25), 0 10px 24px rgba(0,0,0,0.35);
           background: linear-gradient(90deg, #ef4444, #ffffff, #2563eb);
           -webkit-background-clip: text;
           background-clip: text;
@@ -125,9 +125,7 @@ export function DrinkOverlay({
           75% { transform: translateX(-4px); }
           100% { transform: translateX(0); }
         }
-        .drink-shake {
-          animation: drink-shake-kf 420ms ease-in-out both;
-        }
+        .drink-shake { animation: drink-shake-kf 420ms ease-in-out both; }
       `}</style>
     </div>
   );
@@ -135,8 +133,8 @@ export function DrinkOverlay({
 
 // tiny deterministic RNG (for stable burst layouts per seed)
 function mulberry32(a: number) {
-  return function() {
-    let t = (a += 0x6D2B79F5);
+  return function () {
+    let t = (a += 0x6d2b79f5);
     t = Math.imul(t ^ (t >>> 15), t | 1);
     t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
